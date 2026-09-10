@@ -20,7 +20,8 @@ class CodeManager:
         manual_codes_file: str | Path | None = None,
         timeout: float = 15.0,
     ) -> None:
-        self.source_names = sources or list(SOURCES)
+        # explicit empty list = "no online sources" (manual codes only)
+        self.source_names = list(SOURCES) if sources is None else list(sources)
         unknown = [s for s in self.source_names if s not in SOURCES]
         if unknown:
             log.warning("unknown code sources ignored: %s (known: %s)",

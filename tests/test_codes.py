@@ -139,10 +139,25 @@ def test_manager_manual_file(tmp_path):
     assert all(f.source == "manual" for f in findings)
 
 
-def test_manager_ignores_unknown_sources(tmp_path):
+def test_manager_ignores_unknown_sources(tmp_path, monkeypatch):
+    # keep the suite hermetic: no live network in tests
+    monkeypatch.setattr(
+        "kingshotbot.codes.manager.fetch_source",
+        lambda name, timeout=15.0, session=None: [],
+    )
     manager = CodeManager(sources=["not-a-site", "pockettactics"],
                           manual_codes_file=None)
     assert manager.source_names == ["pockettactics"]
+    assert manager.fetch_all() == []
+
+
+def test_manager_empty_sources_means_manual_only(tmp_path):
+    manual = tmp_path / "manual.txt"
+    manual.write_text("VIP777\n")
+    manager = CodeManager(sources=[], manual_codes_file=manual)
+    assert manager.source_names == []
+    findings = manager.fetch_all()
+    assert [f.code for f in findings] == ["VIP777"]
 
 
 def test_known_sources_exist():
