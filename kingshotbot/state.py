@@ -108,5 +108,15 @@ class BotState:
     def mark_reminder(self, key: str) -> None:
         self.data["reminders_sent"][key] = _now()
 
+    def set_march_status(self, busy: int, total: int, source: str) -> None:
+        """Persist the latest detected march-queue status."""
+        self.data["marches"] = {
+            "busy": int(busy),
+            "idle": max(0, int(total) - int(busy)),
+            "total": int(total),
+            "source": source,
+            "observed": _now(),
+        }
+
     def mark_cycle(self) -> None:
         self.data["last_cycle"] = _now()

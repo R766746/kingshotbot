@@ -32,10 +32,12 @@ class Element:
 
     id: str
     rect: Tuple[int, int, int, int]  # x, y, w, h
-    action: str = "nav"  # nav | once | send_march
+    action: str = "nav"  # nav | once | send_march | select
     target: Optional[str] = None  # screen to open (nav)
     effect: Optional[str] = None  # flag to set (once)
     resource: Optional[str] = None  # resource type (send_march)
+    hero: Optional[str] = None  # formation hero (select)
+    plain: bool = False  # draw a compact indicator without text
 
 
 def _e(elem_id, x, y, w, h, **kw):
@@ -69,6 +71,10 @@ SCREENS: Dict[str, List[Element]] = {
         _e("btn_close", 1150, 30, 90, 70, target="world_map"),
     ],
     "march_confirm": [
+        _e("preset_olive", 100, 250, 220, 70, action="select", hero="olive"),
+        _e("preset_forrest", 370, 250, 220, 70, action="select", hero="forrest"),
+        _e("preset_edwin", 640, 250, 220, 70, action="select", hero="edwin"),
+        _e("preset_seth", 910, 250, 220, 70, action="select", hero="seth"),
         _e("btn_march_send", 880, 600, 210, 80, action="send_march",
            target="world_map"),
         _e("btn_close", 1150, 30, 90, 70, target="world_map"),
@@ -100,6 +106,12 @@ SCREENS: Dict[str, List[Element]] = {
            effect="research_started"),
         _e("btn_close", 1150, 30, 90, 70, target="build_menu"),
     ],
+    # Pseudo-screen used only to generate templates for the dynamic march
+    # status indicators rendered on the world map.
+    "march_slots": [
+        _e("march_busy", 0, 0, 36, 36, plain=True),
+        _e("march_idle", 0, 0, 36, 36, plain=True),
+    ],
 }
 
 # Palette (BGR-independent RGB tuples) by element id prefix.
@@ -107,6 +119,11 @@ _CATEGORY_COLORS = {
     "btn_": (46, 116, 229),      # blue buttons
     "tile_": (76, 175, 80),      # green resource tiles
     "bubble_": (255, 193, 7),    # amber collect bubbles
+    "preset_": (0, 121, 107),    # teal formation presets
+}
+_EXACT_COLORS = {
+    "march_idle": (76, 175, 80),
+    "march_busy": (96, 100, 108),
 }
 
 DEFAULT_FLAGS = {
@@ -134,6 +151,8 @@ def _font(size: int = 18) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
 
 
 def _element_color(elem: Element) -> Tuple[int, int, int]:
+    if elem.id in _EXACT_COLORS:
+        return _EXACT_COLORS[elem.id]
     for prefix, color in _CATEGORY_COLORS.items():
         if elem.id.startswith(prefix):
             return color
@@ -148,6 +167,18 @@ def _draw_element(
     color = _element_color(elem)
     draw.rounded_rectangle((x, y, x + w, y + h), radius=12, fill=color,
                            outline=(255, 255, 255), width=3)
+    if elem.plain:
+        # Distinct shapes keep idle/busy templates distinguishable even when
+        # the vision engine is configured for grayscale matching.
+        if elem.id == "march_busy":
+            draw.line((x + 10, y + 10, x + w - 10, y + h - 10),
+                      fill=(255, 255, 255), width=4)
+            draw.line((x + w - 10, y + 10, x + 10, y + h - 10),
+                      fill=(255, 255, 255), width=4)
+        else:
+            draw.ellipse((x + 12, y + 12, x + w - 12, y + h - 12),
+                         fill=(255, 255, 255))
+        return
     font = _font(max(14, min(20, w // max(6, len(elem.id)))))
     text = elem.id
     bbox = draw.textbbox((0, 0), text, font=font)
@@ -183,8 +214,10 @@ class MockDeviceState:
     screen: str = "daily_login"
     flags: Dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_FLAGS))
     marches_available: int = 5
+    marches_total: int = 5
     marches_sent: List[Dict[str, object]] = field(default_factory=list)
     pending_resource: Optional[str] = None  # tile selected before the march
+    pending_hero: Optional[str] = None  # formation selected before the march
     taps: List[Tuple[int, int]] = field(default_factory=list)
     swipes: List[Tuple[int, int, int, int]] = field(default_factory=list)
     keys: List[int] = field(default_factory=list)
@@ -195,9 +228,16 @@ class MockDeviceState:
 class MockDevice:
     """Simulates the game UI well enough to run and test every routine."""
 
-    def __init__(self, marches_available: int = 5) -> None:
+    def __init__(self, marches_available: int = 5, marches_total: int = 5) -> None:
         self.name = "mock:simulator"
-        self.state = MockDeviceState(marches_available=marches_available)
+        if marches_total < 1:
+            raise ValueError("marches_total must be at least 1")
+        if not 0 <= marches_available <= marches_total:
+            raise ValueError("marches_available must be between 0 and marches_total")
+        self.state = MockDeviceState(
+            marches_available=marches_available,
+            marches_total=marches_total,
+        )
 
     # -- internal helpers -------------------------------------------------
     def _visible_elements(self) -> List[Element]:
@@ -226,13 +266,20 @@ class MockDevice:
         draw = ImageDraw.Draw(img)
         draw.text((16, 10), f"SCREEN: {self.state.screen}", fill=(220, 220, 120),
                   font=_font(22))
+        busy = self.state.marches_total - self.state.marches_available
         draw.text(
             (SCREEN_W - 260, 10),
-            f"marches: {self.state.marches_available}", fill=(150, 220, 150),
+            f"marches: {busy}/{self.state.marches_total}",
+            fill=(150, 220, 150),
             font=_font(22),
         )
         for e in self._visible_elements():
             _draw_element(draw, e.rect, e)
+        if self.state.screen == "world_map":
+            slots = {e.id: e for e in SCREENS["march_slots"]}
+            for index in range(self.state.marches_total):
+                status = "march_busy" if index < busy else "march_idle"
+                _draw_element(draw, (20 + index * 40, 50, 36, 36), slots[status])
         return np.asarray(img)[:, :, ::-1].copy()  # RGB -> BGR
 
     def tap(self, x: int, y: int) -> None:
@@ -251,12 +298,18 @@ class MockDevice:
             if self.state.marches_available > 0:
                 self.state.marches_available -= 1
                 self.state.marches_sent.append(
-                    {"resource": self.state.pending_resource,
-                     "from": self.state.screen}
+                    {
+                        "resource": self.state.pending_resource,
+                        "hero": self.state.pending_hero,
+                        "from": self.state.screen,
+                    }
                 )
             self.state.pending_resource = None
+            self.state.pending_hero = None
             if elem.target:
                 self.state.screen = elem.target
+        elif elem.action == "select":
+            self.state.pending_hero = elem.hero
         else:  # nav
             if elem.resource:  # tapping a resource tile selects it
                 self.state.pending_resource = elem.resource

@@ -14,6 +14,8 @@ vision:
   match_threshold: 0.80     # 0-1, raise if false positives, lower if missed taps
   grayscale: true
   ocr_enabled: true         # auto-disabled when tesseract is missing
+  # Optional crop for march-counter OCR: [x, y, width, height]
+  march_counter_region: null
 
 # Optional LLM brain for unfamiliar screens (rule-based brain is default).
 # Set KSB_LLM_API_KEY in your environment when enabling.
@@ -35,6 +37,12 @@ gather:
   march_count: 4
   resource_priority: [stone, iron, bread, wood]
   keep_one_march_free: true
+  # Formation template selected for each resource before the march is sent.
+  formations:
+    bread: olive
+    wood: forrest
+    stone: edwin
+    iron: seth
 
 # Events. Set bear_hunt_utc to your alliance's trap time to get reminders.
 events:
@@ -59,3 +67,20 @@ routines: [daily, gather, build, gifts, events]   # order used by `watch`
 state_file: state.json
 loop_interval_seconds: 300    # pause between full cycles in watch mode
 dry_run: false                # true = observe + log, never tap anything
+
+# Optional multi-account setup. Top-level values above are inherited, then
+# each account applies its overrides. State files are automatically separated
+# (state_main.json, state_farm1.json) unless state_file is set explicitly.
+# When accounts exist, run/watch/status target all of them by default.
+# accounts:
+#   - name: main
+#     device:
+#       serial: "127.0.0.1:5555"
+#   - name: farm1
+#     device:
+#       serial: "127.0.0.1:5565"
+#     state_file: data/farm1.json
+#     gather:
+#       march_count: 2
+#       resource_priority: [bread, wood]
+#     routines: [daily, gather, gifts, events]

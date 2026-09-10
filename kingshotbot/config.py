@@ -7,8 +7,10 @@ URLs, LLM API keys).
 
 from __future__ import annotations
 
+import copy
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -39,6 +41,8 @@ class VisionConfig:
     match_threshold: float = 0.80  # template-match confidence
     grayscale: bool = True
     ocr_enabled: bool = True  # auto-disabled if tesseract is missing
+    # Optional [x, y, width, height] crop for the march-counter OCR fallback.
+    march_counter_region: Optional[List[int]] = None
 
 
 @dataclass
@@ -79,6 +83,14 @@ class GatherConfig:
         default_factory=lambda: ["stone", "iron", "bread", "wood"]
     )
     keep_one_march_free: bool = True  # reserve a march for auto-rally-join
+    formations: Dict[str, str] = field(
+        default_factory=lambda: {
+            "bread": "olive",
+            "wood": "forrest",
+            "stone": "edwin",
+            "iron": "seth",
+        }
+    )
 
 
 @dataclass
@@ -116,6 +128,23 @@ class GiftsConfig:
 
 
 @dataclass
+class AccountConfig:
+    """Overrides for one emulator/account in a multi-account setup."""
+
+    name: str
+    device: Dict[str, Any] = field(default_factory=dict)
+    vision: Dict[str, Any] = field(default_factory=dict)
+    llm: Dict[str, Any] = field(default_factory=dict)
+    notify: Dict[str, Any] = field(default_factory=dict)
+    gather: Dict[str, Any] = field(default_factory=dict)
+    events: Dict[str, Any] = field(default_factory=dict)
+    gifts: Dict[str, Any] = field(default_factory=dict)
+    routines: Optional[List[str]] = None
+    state_file: Optional[str] = None
+    dry_run: Optional[bool] = None
+
+
+@dataclass
 class BotConfig:
     """Top-level configuration."""
 
@@ -126,6 +155,7 @@ class BotConfig:
     gather: GatherConfig = field(default_factory=GatherConfig)
     events: EventsConfig = field(default_factory=EventsConfig)
     gifts: GiftsConfig = field(default_factory=GiftsConfig)
+    accounts: List[AccountConfig] = field(default_factory=list)
     routines: List[str] = field(
         default_factory=lambda: ["daily", "gather", "build", "gifts", "events"]
     )
@@ -141,6 +171,8 @@ def _apply_env_overrides(cfg: BotConfig) -> None:
         cfg.device.mode = env["KSB_DEVICE_MODE"].strip().lower()
     if env.get("KSB_ADB_SERIAL"):
         cfg.device.serial = env["KSB_ADB_SERIAL"].strip()
+    if env.get("KSB_STATE_FILE"):
+        cfg.state_file = env["KSB_STATE_FILE"].strip()
     if env.get("KSB_DRY_RUN", "").strip().lower() in {"1", "true", "yes"}:
         cfg.dry_run = True
     if env.get("KSB_LLM_ENABLED", "").strip().lower() in {"1", "true", "yes"}:
@@ -157,6 +189,48 @@ def _build_section(section: Any, data: Dict[str, Any], name: str) -> None:
             setattr(section, key, value)
         else:
             log.warning("config: unknown key %r in section '%s' - ignored", key, name)
+
+
+def _build_accounts(data: Any) -> List[AccountConfig]:
+    """Parse and validate the top-level ``accounts`` list."""
+    if data is None:
+        return []
+    if not isinstance(data, list):
+        raise ValueError("config.accounts must be a YAML list")
+    valid = set(AccountConfig.__dataclass_fields__)
+    accounts: List[AccountConfig] = []
+    names = set()
+    for index, entry in enumerate(data):
+        if not isinstance(entry, dict):
+            raise ValueError(f"config.accounts[{index}] must be a mapping")
+        name = str(entry.get("name", "")).strip()
+        if not name:
+            raise ValueError(f"config.accounts[{index}] requires a non-empty name")
+        if name in names:
+            raise ValueError(f"duplicate account name: {name!r}")
+        names.add(name)
+        kwargs: Dict[str, Any] = {"name": name}
+        for key, value in entry.items():
+            if key == "name":
+                continue
+            if key in valid:
+                if key in {
+                    "device", "vision", "llm", "notify", "gather", "events", "gifts"
+                } and not isinstance(value, dict):
+                    raise ValueError(
+                        f"config.accounts[{index}].{key} must be a mapping"
+                    )
+                if key == "routines" and value is not None and not isinstance(value, list):
+                    raise ValueError(
+                        f"config.accounts[{index}].routines must be a list"
+                    )
+                kwargs[key] = value
+            else:
+                log.warning(
+                    "config: unknown key %r in account %r - ignored", key, name
+                )
+        accounts.append(AccountConfig(**kwargs))
+    return accounts
 
 
 def load_config(path: str | Path | None = None) -> BotConfig:
@@ -184,6 +258,8 @@ def load_config(path: str | Path | None = None) -> BotConfig:
             for key, value in raw.items():
                 if key in sections:
                     _build_section(sections[key], value, key)
+                elif key == "accounts":
+                    cfg.accounts = _build_accounts(value)
                 elif key == "routines":
                     cfg.routines = list(value)
                 elif key == "state_file":
@@ -198,6 +274,57 @@ def load_config(path: str | Path | None = None) -> BotConfig:
             log.warning("config file %s not found - using defaults", path)
     _apply_env_overrides(cfg)
     return cfg
+
+
+def for_account(cfg: BotConfig, name: str) -> BotConfig:
+    """Return an independent config with one account's overrides applied.
+
+    Accounts inherit all top-level settings.  A unique state filename is
+    generated when the account does not explicitly provide one, preventing
+    account histories and gift-code memories from being mixed together.
+    """
+    configured = {account.name: account for account in cfg.accounts}
+    if name not in configured:
+        available = ", ".join(sorted(configured)) or "none"
+        raise KeyError(f"unknown account {name!r}; configured accounts: {available}")
+
+    account = configured[name]
+    merged = copy.deepcopy(cfg)
+    merged.accounts = []
+    for section_name in (
+        "device", "vision", "llm", "notify", "gather", "events", "gifts"
+    ):
+        overrides = copy.deepcopy(getattr(account, section_name))
+        if overrides:
+            section = getattr(merged, section_name)
+            # Mapping-valued settings such as gather.formations are merged so
+            # an account can customize one resource without repeating all four.
+            for key, value in list(overrides.items()):
+                inherited = getattr(section, key, None)
+                if isinstance(inherited, dict) and isinstance(value, dict):
+                    combined = copy.deepcopy(inherited)
+                    combined.update(value)
+                    overrides[key] = combined
+            _build_section(
+                section,
+                overrides,
+                f"accounts.{name}.{section_name}",
+            )
+
+    if account.routines is not None:
+        merged.routines = list(account.routines)
+    if account.dry_run is not None:
+        merged.dry_run = bool(account.dry_run)
+    if account.state_file:
+        merged.state_file = str(account.state_file)
+    else:
+        state = Path(merged.state_file)
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("._") or "account"
+        suffix = state.suffix or ".json"
+        merged.state_file = str(
+            state.with_name(f"{state.stem}_{safe_name}{suffix}")
+        )
+    return merged
 
 
 def discord_webhook_url(cfg: BotConfig) -> Optional[str]:

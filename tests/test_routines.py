@@ -39,12 +39,47 @@ def test_gather_routine_sends_marches(make_agent):
     assert dev.state.screen == "city"         # returned home
 
 
-def test_gather_routine_with_one_march(make_agent):
+def test_gather_routine_keeps_last_idle_march_free(make_agent):
     agent, dev = make_agent(marches=1)
     result = agent.run_routine("gather")
-    # it tries 4 marches but only 1 exists; sends what it can
-    assert len(dev.state.marches_sent) == 1
+    assert len(dev.state.marches_sent) == 0
+    assert dev.state.marches_available == 1
     assert result.ok
+    assert "no idle marches" in result.summary
+
+
+def test_gather_can_use_last_march_when_reservation_disabled(make_agent):
+    agent, dev = make_agent(marches=1)
+    agent.config.gather.keep_one_march_free = False
+    result = agent.run_routine("gather")
+    assert result.ok
+    assert len(dev.state.marches_sent) == 1
+    assert dev.state.marches_available == 0
+
+
+def test_gather_sends_only_detected_idle_marches(make_agent):
+    agent, dev = make_agent(marches=2)
+    result = agent.run_routine("gather")
+    assert result.ok
+    assert len(dev.state.marches_sent) == 1
+    assert dev.state.marches_available == 1
+    status = agent.state.data["marches"]
+    assert status["busy"] == 4
+    assert status["idle"] == 1
+    assert status["source"] == "templates"
+
+
+def test_gather_selects_formation_for_each_resource(make_agent):
+    agent, dev = make_agent(marches=5)
+    result = agent.run_routine("gather")
+    assert result.ok
+    formations = {item["resource"]: item["hero"] for item in dev.state.marches_sent}
+    assert formations == {
+        "stone": "edwin",
+        "iron": "seth",
+        "bread": "olive",
+        "wood": "forrest",
+    }
 
 
 def test_gather_routine_respects_priority(make_agent):

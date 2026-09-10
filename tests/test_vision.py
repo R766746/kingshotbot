@@ -82,3 +82,45 @@ def test_has_and_template_names(templates_dir):
 
 def test_empty_templates_dir_warning(tmp_path):
     Vision(templates_dir=tmp_path / "nope")  # must not raise
+
+
+def test_parse_march_counter_handles_ocr_variants():
+    from kingshotbot.vision import parse_march_counter
+
+    assert parse_march_counter("Marches: 3/5") == (3, 5)
+    assert parse_march_counter("queue 2 | 6") == (2, 6)
+    assert parse_march_counter("0/5 busy") == (0, 5)
+    assert parse_march_counter("9/5") is None
+    assert parse_march_counter("no counter") is None
+
+
+def test_march_status_counts_mock_slots(templates_dir):
+    # Default UI threshold is 0.80; march slots apply a stricter internal floor
+    # so idle and busy variants cannot both match the same indicator.
+    vision = Vision(templates_dir=templates_dir, threshold=0.80)
+    dev = MockDevice(marches_available=2, marches_total=5)
+    dev.force_screen("world_map")
+
+    status = vision.march_status(dev.screenshot())
+
+    assert status is not None
+    assert status.source == "templates"
+    assert status.busy == 3
+    assert status.idle == 2
+    assert status.total == 5
+
+
+def test_march_status_falls_back_to_ocr(tmp_path, monkeypatch):
+    templates = tmp_path / "templates"
+    templates.mkdir()
+    vision = Vision(templates_dir=templates)
+    monkeypatch.setattr(
+        vision, "ocr", lambda _screen, region=None: "March queues 4/6"
+    )
+
+    status = vision.march_status(np.zeros((20, 20, 3), dtype=np.uint8))
+
+    assert status is not None
+    assert status.source == "ocr"
+    assert status.busy == 4
+    assert status.idle == 2

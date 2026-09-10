@@ -33,6 +33,11 @@ names (missing ones are skipped gracefully, alternatives in brackets):
 | `tile_wood.png` (`tile_lumber`) | world map wood tile | gather |
 | `btn_search_gather.png` (`btn_gather`, `btn_search`) | tile detail dialog | gather |
 | `btn_march_send.png` (`btn_send`, `btn_march`) | march confirm dialog | gather |
+| `march_idle.png`, `march_busy.png` | march status slots/counter on world map | gather march-return detection |
+| `preset_olive.png` | Olive formation/preset in march dialog | bread gathering |
+| `preset_forrest.png` | Forrest formation/preset in march dialog | wood gathering |
+| `preset_edwin.png` | Edwin formation/preset in march dialog | stone gathering |
+| `preset_seth.png` | Seth formation/preset in march dialog | iron gathering |
 | `btn_close.png` (`close`, `x_button`) | top-right X of any dialog | all |
 
 ## How to capture
@@ -55,5 +60,11 @@ names (missing ones are skipped gracefully, alternatives in brackets):
   (1280x720 is a good default) and capture templates at that resolution.
 - If taps land on the wrong thing, raise `vision.match_threshold` in
   `config.yaml` (e.g. 0.85-0.9). If elements are not found, lower it.
+- For march-return detection, capture both idle and busy slot/icon states.
+  If they are unavailable, Tesseract OCR reads a `busy/total` counter such as
+  `3/5` instead. Set `vision.march_counter_region: [x, y, width, height]` if
+  other fractions elsewhere on the screen confuse OCR.
+- Formation names are configurable under `gather.formations`; a value like
+  `olive` maps to `preset_olive.png`.
 - `manual_codes.txt` in this folder can hold gift codes you found
   yourself — one per line, `# comments` allowed.

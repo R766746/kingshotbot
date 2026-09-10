@@ -13,11 +13,17 @@ log = logging.getLogger("kingshotbot.notify")
 class Notifier:
     """Sends messages to the console and (optionally) a Discord webhook."""
 
-    def __init__(self, webhook_url: Optional[str] = None, console: bool = True,
-                 timeout: float = 10.0) -> None:
+    def __init__(
+        self,
+        webhook_url: Optional[str] = None,
+        console: bool = True,
+        timeout: float = 10.0,
+        title_prefix: str = "",
+    ) -> None:
         self.webhook_url = webhook_url
         self.console = console
         self.timeout = timeout
+        self.title_prefix = title_prefix.strip()
 
     def send(self, message: str, *, embed: bool = True, title: str = "KingshotBot") -> None:
         """Log locally and post to Discord if configured.
@@ -28,6 +34,8 @@ class Notifier:
             log.info("notify: %s", message)
         if not self.webhook_url:
             return
+        if self.title_prefix:
+            title = f"{self.title_prefix} · {title}"
         payload: dict = {"content": message} if not embed else {
             "embeds": [
                 {
