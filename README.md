@@ -138,7 +138,7 @@ kingshotbot/
 │   ├── codes/               # online gift-code scrapers
 │   └── data/game_knowledge.yaml   # distilled community research
 ├── templates/               # your captured UI templates (see its README)
-├── tests/                   # 59 tests (pytest) incl. full agent pipeline
+├── tests/                   # 60 tests (pytest) incl. full agent pipeline
 └── docs/                    # RESEARCH.md, SETUP.md
 ```
 
@@ -146,7 +146,7 @@ kingshotbot/
 
 ```bash
 pip install -r requirements-dev.txt
-pytest               # 59 tests, no device/emulator needed
+pytest               # 60 tests, no device/emulator needed
 ```
 
 The test-suite runs the *entire* pipeline — vision, agent, routines — against
