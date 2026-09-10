@@ -105,6 +105,19 @@ class ADBDevice:
                 capture_output=True,
                 timeout=self.connect_timeout,
             )
+            # Network emulator serials are not always registered with a fresh
+            # ADB server (notably inside Docker), so connect them explicitly.
+            if self.serial and ":" in self.serial:
+                connected = subprocess.run(
+                    [self.adb_path, "connect", self.serial],
+                    capture_output=True,
+                    timeout=self.connect_timeout,
+                )
+                log.debug(
+                    "adb connect %s: %s",
+                    self.serial,
+                    connected.stdout.decode(errors="replace").strip(),
+                )
             out = subprocess.run(
                 [self.adb_path, "devices"],
                 capture_output=True,

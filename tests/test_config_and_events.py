@@ -83,3 +83,65 @@ def test_events_bear_hunt_invalid_time_ignored(make_agent):
     agent.config.events.bear_hunt_utc = "not-a-time"
     result = agent.run_routine("events")
     assert result.ok
+
+
+def test_account_config_inherits_and_overrides_sections(tmp_path):
+    from kingshotbot.config import for_account
+
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        "device:\n  mode: adb\n  tap_delay: 0.2\n"
+        "state_file: data/state.json\n"
+        "accounts:\n"
+        "  - name: main\n"
+        "    device: {serial: '127.0.0.1:5555'}\n"
+        "  - name: farm-one\n"
+        "    device: {serial: '127.0.0.1:5565'}\n"
+        "    state_file: data/farm.json\n"
+        "    gather:\n"
+        "      march_count: 2\n"
+        "      resource_priority: [bread, wood]\n"
+        "      formations: {bread: custom_baker}\n"
+    )
+    cfg = load_config(config_file)
+
+    main = for_account(cfg, "main")
+    farm = for_account(cfg, "farm-one")
+
+    assert [account.name for account in cfg.accounts] == ["main", "farm-one"]
+    assert main.device.serial == "127.0.0.1:5555"
+    assert main.device.tap_delay == 0.2
+    assert main.state_file == "data/state_main.json"
+    assert farm.device.serial == "127.0.0.1:5565"
+    assert farm.gather.march_count == 2
+    assert farm.gather.resource_priority == ["bread", "wood"]
+    assert farm.gather.formations["bread"] == "custom_baker"
+    assert farm.gather.formations["stone"] == "edwin"
+    assert farm.state_file == "data/farm.json"
+    # Merging an account must not mutate the base config.
+    assert cfg.device.serial is None
+    assert cfg.gather.march_count == 4
+
+
+def test_account_names_must_be_unique(tmp_path):
+    import pytest
+
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("accounts:\n  - {name: farm}\n  - {name: farm}\n")
+    with pytest.raises(ValueError, match="duplicate account"):
+        load_config(config_file)
+
+
+def test_unknown_account_is_rejected():
+    import pytest
+    from kingshotbot.config import AccountConfig, for_account
+
+    cfg = BotConfig(accounts=[AccountConfig(name="main")])
+    with pytest.raises(KeyError, match="unknown account"):
+        for_account(cfg, "farm")
+
+
+def test_state_file_env_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("KSB_STATE_FILE", str(tmp_path / "custom.json"))
+    cfg = load_config(None)
+    assert cfg.state_file == str(tmp_path / "custom.json")

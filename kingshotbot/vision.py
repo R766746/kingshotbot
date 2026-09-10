@@ -9,6 +9,7 @@ templates match exactly, so the whole pipeline is testable offline.
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import time
 from dataclasses import dataclass
@@ -19,6 +20,38 @@ import cv2
 import numpy as np
 
 log = logging.getLogger("kingshotbot.vision")
+
+
+_MARCH_COUNTER_RE = re.compile(r"(?<!\d)(\d+)\s*[/|]\s*(\d+)(?!\d)")
+
+
+def parse_march_counter(text: str) -> Optional[Tuple[int, int]]:
+    """Parse a ``busy/total`` march counter from OCR text.
+
+    OCR sometimes reads the slash as a vertical bar, so both separators are
+    accepted. Invalid counters are rejected instead of producing negative
+    idle-march counts.
+    """
+    match = _MARCH_COUNTER_RE.search(text or "")
+    if match is None:
+        return None
+    busy, total = int(match.group(1)), int(match.group(2))
+    if total < 1 or busy > total:
+        return None
+    return busy, total
+
+
+@dataclass(frozen=True)
+class MarchStatus:
+    """Detected state of the player's march queues."""
+
+    busy: int
+    total: int
+    source: str
+
+    @property
+    def idle(self) -> int:
+        return max(0, self.total - self.busy)
 
 
 @dataclass(frozen=True)
@@ -45,13 +78,14 @@ class Vision:
         templates_dir: str | Path = "templates",
         threshold: float = 0.80,
         grayscale: bool = True,
+        ocr_enabled: bool = True,
     ) -> None:
         self.templates_dir = Path(templates_dir)
         self.threshold = threshold
         self.grayscale = grayscale
         self._templates: Dict[str, np.ndarray] = {}
         self._load_templates()
-        self._tesseract = shutil.which("tesseract") is not None
+        self._tesseract = ocr_enabled and shutil.which("tesseract") is not None
         if not self._templates:
             log.warning(
                 "no templates found in %s - UI routines will not match anything. "
@@ -168,6 +202,36 @@ class Vision:
             if len(taken) >= max_results:
                 break
         return taken
+
+    def march_status(
+        self,
+        screen: np.ndarray,
+        ocr_region: Optional[Tuple[int, int, int, int]] = None,
+    ) -> Optional[MarchStatus]:
+        """Detect busy/total marches using slot templates, then OCR.
+
+        Template indicators are preferred because they are fast and work
+        without Tesseract. When users only capture the on-screen counter,
+        OCR of strings such as ``3/5`` provides the fallback.
+        """
+        if self.has("march_idle") and self.has("march_busy"):
+            # Status icons are visually similar, so use a stricter floor than
+            # general buttons to avoid counting one slot as both idle and busy.
+            slot_threshold = max(self.threshold, 0.90)
+            idle = len(
+                self.find_all(screen, "march_idle", threshold=slot_threshold)
+            )
+            busy = len(
+                self.find_all(screen, "march_busy", threshold=slot_threshold)
+            )
+            if idle or busy:
+                return MarchStatus(busy=busy, total=busy + idle, source="templates")
+
+        parsed = parse_march_counter(self.ocr(screen, region=ocr_region))
+        if parsed is None:
+            return None
+        busy, total = parsed
+        return MarchStatus(busy=busy, total=total, source="ocr")
 
     # ------------------------------------------------------------------ #
     def wait_for(

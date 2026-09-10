@@ -8,6 +8,4 @@ numpy>=1.24
 Pillow>=10.0
 PyYAML>=6.0
 requests>=2.31
-
-# Optional extras (uncomment if you want them):
-# pytesseract>=0.3.10   # OCR (also requires the tesseract binary)
+pytesseract>=0.3.10   # OCR wrapper (also requires the tesseract binary)

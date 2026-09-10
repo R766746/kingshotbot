@@ -1,0 +1,19 @@
+services:
+  kingshotbot:
+    build: .
+    image: kingshotbot:latest
+    restart: unless-stopped
+    init: true
+    extra_hosts:
+      # Lets ADB reach an emulator running on the Docker host (Linux included).
+      - "host.docker.internal:host-gateway"
+    environment:
+      KSB_ADB_SERIAL: "${KSB_ADB_SERIAL:-host.docker.internal:5555}"
+      KSB_STATE_FILE: /data/state.json
+      KSB_DISCORD_WEBHOOK: "${KSB_DISCORD_WEBHOOK:-}"
+      KSB_LLM_API_KEY: "${KSB_LLM_API_KEY:-}"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./templates:/app/templates:ro
+      - ./data:/data
+    command: ["watch"]

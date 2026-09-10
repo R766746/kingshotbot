@@ -28,3 +28,16 @@ jobs:
           KSB_DEVICE_MODE=mock python main.py doctor
           python main.py run --all --mock
           python main.py info bear_hunt
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t kingshotbot:ci .
+      - name: Smoke-test image with simulator
+        run: |
+          docker run --rm -e KSB_DEVICE_MODE=mock kingshotbot:ci doctor
+          docker run --rm -e KSB_DEVICE_MODE=mock kingshotbot:ci \
+            run -r daily -r gather --mock

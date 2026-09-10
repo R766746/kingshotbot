@@ -21,7 +21,7 @@ codes online and your alliance's event schedule.
 | Routine | What the agent does |
 | --- | --- |
 | `daily` | Claims daily login, quests, mail, alliance help; collects production bubbles |
-| `gather` | Opens the world map and fills your march queues with stone/iron/bread/wood gathers (tiles L6–8, one march kept free for rallies) |
+| `gather` | Detects returned/idle marches, keeps one free for rallies, selects Olive/Forrest/Edwin/Seth formations, then gathers stone/iron/bread/wood (tiles L6–8) |
 | `build` | Starts construction & research upgrades whenever the queues go idle |
 | `gifts` | Scrapes public gift-code sites, dedupes against its memory, and **announces new codes** (console + Discord webhook) |
 | `events` | Tracks the 00:00 UTC daily reset, reminds you to spend arena attacks and stamina, and counts down to your alliance's Bear Hunt |
@@ -53,13 +53,15 @@ python main.py run --all --mock
 * **Device layer** — `adb` (BlueStacks, LDPlayer, MuMu, Google Play Games on
   PC, or a USB phone) or the built-in mock simulator.
 * **Vision** — OpenCV template matching against PNG templates you capture
-  once from your own screen (10 minutes, one time). Optional Tesseract OCR.
+  once from your own screen (10 minutes, one time), including march-slot
+  counting with Tesseract OCR fallback for `busy/total` counters.
 * **Brain** — a deterministic rule engine by default; optionally an
   OpenAI-compatible LLM brain for screens the rules don't recognize (it can
   only choose from a fixed action vocabulary — it can't invent actions).
 * **Routines** — small, self-contained automation units with recovery
   (press BACK, re-find, bail out safely). `dry_run` mode observes and logs
-  without ever tapping.
+  without ever tapping. Named accounts can each override device, routines,
+  gathering priorities, formations, notifications, and state storage.
 * **Online data** — gift-code discovery from public code pages
   (pockettactics, pocketgamer, topuplive, lootbar) + a manual-codes file,
   and an embedded game-knowledge base distilled from community research
@@ -99,6 +101,8 @@ python main.py run -r daily           # run one routine (repeat -r for more)
 python main.py run --all [--mock]     # every routine / force simulator
 python main.py run -r gather --dry-run# observe + log, never tap
 python main.py watch [--interval 300] # endless supervisor loop
+python main.py run -r daily --account farm1  # run one configured account
+python main.py run -r gather --all-accounts # run every configured account
 python main.py codes [--announce]     # fetch gift codes online now
 python main.py capture [--count 5]    # screenshots for template cropping
 python main.py screenshot out.png     # single screenshot
@@ -115,8 +119,44 @@ everything has defaults). Sensitive values live in environment variables:
 export KSB_DISCORD_WEBHOOK="https://discord.com/api/webhooks/..."  # optional
 export KSB_LLM_API_KEY="sk-..."                                    # optional
 export KSB_ADB_SERIAL="127.0.0.1:5555"   # optional (BlueStacks default)
-export KSB_DRY_RUN=1                     # safety: observe only
+export KSB_STATE_FILE="data/state.json"      # optional persistence path
+export KSB_DRY_RUN=1                         # safety: observe only
 ```
+
+Multi-account setups inherit the top-level config and apply per-account
+settings. `run`, `watch`, and `status` operate on all configured accounts by
+default; use `--account NAME` to select one:
+
+```yaml
+accounts:
+  - name: main
+    device: {serial: "127.0.0.1:5555"}
+  - name: farm1
+    device: {serial: "127.0.0.1:5565"}
+    gather:
+      march_count: 2
+      resource_priority: [bread, wood]
+```
+
+Each account gets a separate state file automatically. See
+[`config.example.yaml`](config.example.yaml) for every supported override.
+
+## Docker
+
+Docker includes ADB and Tesseract. Copy the example config, make the data
+directory writable by container UID 1000, then start the supervisor:
+
+```bash
+cp config.example.yaml config.yaml
+mkdir -p data
+# Linux: sudo chown 1000:1000 data
+docker compose up -d --build
+docker compose logs -f
+```
+
+The Compose service reaches a host emulator through
+`host.docker.internal:5555`; set `KSB_ADB_SERIAL` if your emulator uses another
+port. Full instructions are in [docs/SETUP.md](docs/SETUP.md#8-docker).
 
 ## Project layout
 
@@ -124,6 +164,8 @@ export KSB_DRY_RUN=1                     # safety: observe only
 kingshotbot/
 ├── main.py                  # CLI entry point
 ├── config.example.yaml      # documented config template
+├── Dockerfile               # ADB + Tesseract runtime image
+├── docker-compose.yml       # persistent supervisor service
 ├── kingshotbot/
 │   ├── agent.py             # observe → decide → act loop, dry-run safety
 │   ├── device.py            # ADB device layer
@@ -138,7 +180,7 @@ kingshotbot/
 │   ├── codes/               # online gift-code scrapers
 │   └── data/game_knowledge.yaml   # distilled community research
 ├── templates/               # your captured UI templates (see its README)
-├── tests/                   # 60 tests (pytest) incl. full agent pipeline
+├── tests/                   # 74 tests (pytest) incl. full agent pipeline
 └── docs/                    # RESEARCH.md, SETUP.md
 ```
 
@@ -146,7 +188,7 @@ kingshotbot/
 
 ```bash
 pip install -r requirements-dev.txt
-pytest               # 60 tests, no device/emulator needed
+pytest               # 74 tests, no device/emulator needed
 ```
 
 The test-suite runs the *entire* pipeline — vision, agent, routines — against
@@ -160,8 +202,10 @@ not mocks of it.
 - Gift-code sources are public websites; layouts change and sources
   occasionally fail (errors are reported, never fatal). Add your own codes to
   `templates/manual_codes.txt`.
-- Roadmap: march-return detection via OCR, hero formation presets per
-  resource, multi-account support, Docker packaging.
+- March-counter OCR depends on the game exposing a readable `busy/total`
+  value; capturing `march_idle.png` and `march_busy.png` is more reliable.
+- Future work: in-game mail parsing, smarter event participation, march ETA
+  scheduling, and a small local status dashboard.
 
 ## Credits & disclaimer
 
