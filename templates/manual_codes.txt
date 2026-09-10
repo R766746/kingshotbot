@@ -1,0 +1,6 @@
+# Gift codes you found yourself (one per line). Lines are checked and
+# announced together with the online sources. Status defaults to active.
+# Example:
+# VIP777
+# KS0822 active
+# OLDCODE expired
