@@ -1,0 +1,70 @@
+# Game knowledge assembled from public community research (Sept 2026).
+# Sources: kingshotwiki.com, boostbot.org event calendar, kingshotmastery.com,
+# kingshothandbook.com, kingshot.fandom.com, heaven-guardian.com resource guide.
+# Used by the bot for routine defaults and the `info` CLI command.
+
+game:
+  title: Kingshot
+  developer: Century Games Pte. Ltd.
+  release: 2025-02-22
+  genre: idle medieval survival strategy (4X + tower defense)
+  daily_reset: "00:00 UTC"
+
+resources:
+  bread:  { building: Mill,      gathering_hero: Olive }
+  wood:   { building: Sawmill,   gathering_hero: Forrest }
+  stone:  { building: Quarry,    gathering_hero: Edwin }
+  iron:   { building: Iron Mine, gathering_hero: Seth }
+
+gathering:
+  best_tile_levels: [6, 7, 8]        # levels 9-10 do not exist
+  territory_bonus: "Town Center inside alliance territory gives +50-100% gathering"
+  cadence: "queue 8h gathers before bed; collect + requeue in the morning"
+
+heroes:
+  gathering: { bread: Olive, wood: Forrest, stone: Edwin, iron: Seth }
+  city_battle_gen1: [Amadeus, Jabel, Saul]   # F2P: Howard, Jabel, Quinn, Saul
+  bear_hunt_joiners: [Amadeus, Ava]
+
+bear_hunt:
+  cadence: "every 2 days, 30 minutes, scheduled by R4/R5"
+  formation: "Infantry 1-10% / Cavalry 5-10% / Archers 80-90% (1/10/89 at Gen4+)"
+  trap_enhancement: "donate Hunting Arrows; Pitfall level 5 = +25% alliance attack"
+  notes:
+    - "Bear never fights back - pure damage check"
+    - "Auto-rally does NOT work in bear trap; be online and join manually"
+    - "Stay in the alliance until tally or lose personal damage rewards"
+
+arena:
+  attacks_per_day: 10
+  tip: "play your 10 attacks in the last 1-10 minutes before 00:00 UTC reset"
+
+events:
+  weekly:
+    - { name: Bear Hunt (Bear Trap), cadence: every-2-days }
+    - { name: Alliance Championship, cadence: weekly }
+    - { name: Armament Competition, cadence: 2-day, cycle: 2-weeks }
+    - { name: Officer Project, cadence: 2-day, cycle: 2-weeks }
+    - { name: Swordland Showdown, cadence: recurring, note: "matches on Sundays" }
+  rotating_4_weeks:
+    - { name: Strongest Governor, length_days: 7 }
+    - { name: Kingdom of Power (KvK), length_days: 5 }
+    - { name: Alliance Brawl, length_days: 6 }
+    - { name: Champagne Fair, length_days: 0, note: monthly }
+
+daily_checklist:
+  - Collect city production
+  - Claim daily login reward
+  - Spend Governor Stamina on Intel missions
+  - Help all alliance timers
+  - Claim alliance gifts & mail
+  - Start construction + research queues
+  - Train troops (highest tier available)
+  - Send marches gathering (stone/iron priority)
+  - Check Nomadic Merchant deals
+  - Play arena attacks near reset
+
+gift_codes:
+  redemption_center: https://ks-giftcode.centurygame.com/
+  how_to_redeem: "Avatar (top-left) -> copy Player ID + Kingdom, enter code on the site"
+  rewards_go_to: in-game mailbox

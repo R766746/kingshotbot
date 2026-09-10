@@ -1,0 +1,61 @@
+# KingshotBot configuration
+# Copy to config.yaml and adjust. Everything here has a safe default;
+# an empty file is a valid config.
+
+device:
+  mode: adb                 # adb | mock (built-in simulator, great for demos)
+  adb_path: adb             # path to the adb binary
+  serial: null              # e.g. "127.0.0.1:5555" (BlueStacks) or "emulator-5554"
+  screenshot_interval: 0.6
+  tap_delay: 0.35
+
+vision:
+  templates_dir: templates
+  match_threshold: 0.80     # 0-1, raise if false positives, lower if missed taps
+  grayscale: true
+  ocr_enabled: true         # auto-disabled when tesseract is missing
+
+# Optional LLM brain for unfamiliar screens (rule-based brain is default).
+# Set KSB_LLM_API_KEY in your environment when enabling.
+llm:
+  enabled: false
+  base_url: https://api.openai.com/v1   # any OpenAI-compatible endpoint
+  model: gpt-4o-mini
+  api_key_env: KSB_LLM_API_KEY
+
+notify:
+  discord_webhook_env: KSB_DISCORD_WEBHOOK   # env var that holds the webhook URL
+  console: true
+
+# Gathering (defaults from community research: tiles 6-8 are best,
+# stone/iron are usually the bottleneck, keep a march free for rallies).
+gather:
+  enabled: true
+  tile_levels: 6-8
+  march_count: 4
+  resource_priority: [stone, iron, bread, wood]
+  keep_one_march_free: true
+
+# Events. Set bear_hunt_utc to your alliance's trap time to get reminders.
+events:
+  enabled: true
+  daily_reset_utc_hour: 0     # Kingshot resets at 00:00 UTC
+  bear_hunt_interval_days: 2
+  bear_hunt_utc: null         # e.g. "19:30"
+  arena_attacks_per_day: 10
+  reminder_minutes_before: [60, 15]
+
+# Gift-code discovery from public sources. Codes are announced (not
+# auto-redeemed) - redeem at the official site with your Player ID.
+gifts:
+  enabled: true
+  sources: [pockettactics, pocketgamer, topuplive, lootbar]
+  check_interval_minutes: 60
+  manual_codes_file: templates/manual_codes.txt
+  player_id: ""               # your in-game Player ID (optional, for reminders)
+  kingdom: ""
+
+routines: [daily, gather, build, gifts, events]   # order used by `watch`
+state_file: state.json
+loop_interval_seconds: 300    # pause between full cycles in watch mode
+dry_run: false                # true = observe + log, never tap anything
